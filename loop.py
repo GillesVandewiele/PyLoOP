@@ -2,6 +2,9 @@ from math import erf
 import numpy as np
 import sys
 import warnings
+from sklearn.neighbors import KDTree
+import warnings
+warnings.filterwarnings('ignore')
 
 __version__ = '0.1.0'
 
@@ -33,6 +36,7 @@ class LocalOutlierProbability(object):
         self.n_neighbors = n_neighbors
         self.cluster_labels = cluster_labels
         self.local_outlier_probabilities = None
+        self.kde = KDTree(data)
 
     @staticmethod
     def _standard_distance(mean_distance, sum_squared_distance):
@@ -76,12 +80,16 @@ class LocalOutlierProbability(object):
             elif self.data.__class__.__name__ == 'ndarray':
                 points_vector = self.data.take(indices, axis=0)
                 points_vector = points_vector.reshape(points_vector.shape[1:])
-            d = (points_vector[:, np.newaxis] - points_vector)
-            for vec in range(d.shape[1]):
-                neighborhood_distances = np.sort(np.mean(np.sqrt(d[:, vec] ** 2), axis=1))[1:self.n_neighbors + 1]
-                neighborhood_dist = np.mean(neighborhood_distances)
-                closest_neighbor_distance = neighborhood_distances[1:2]
-                data_store[indices[0][vec]] = np.array([cluster_id, neighborhood_dist, closest_neighbor_distance])
+
+            neighborhood_distances, _ = self.kde.query(points_vector, k=self.n_neighbors + 1)
+            neighborhood_distances = neighborhood_distances[:, 1:]
+            neighborhood_dist = np.mean(neighborhood_distances, axis=1)
+            closest_neighbor_distance = neighborhood_distances[:, :1]
+            data_store[indices] = np.hstack((
+                self._cluster_labels().reshape((-1, 1)),
+                neighborhood_dist.reshape((-1, 1)),
+                closest_neighbor_distance.reshape((-1, 1)),
+            ))
 
         return data_store
 
